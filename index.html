@@ -26,34 +26,47 @@
     .col{background:var(--panel);border:1px solid #223047;border-radius:var(--radius);padding:14px;min-height:420px}
     .col h2{margin:4px 6px 10px;font-size:14px;color:var(--muted);font-weight:700;letter-spacing:.3px;text-transform:uppercase}
     .list{display:grid;gap:10px}
-    .card{background:var(--card);border:1px solid #223047;border-radius:14px;padding:12px;display:flex;align-items:center;gap:10px;line-height:1.35}
-    .card img{width:40px;height:40px;border-radius:8px;object-fit:cover}
+    .card{background:var(--card);border:1px solid #223047;border-radius:14px;padding:12px 14px;line-height:1.35}
     .card button{all:unset;display:block;width:100%;cursor:pointer}
     .card[data-state="matched"]{opacity:.5;filter:saturate(.8)}
-    .card.drag-over{outline:2px dashed var(--accent)}
+    .card[data-state="selected"]{outline:2px solid var(--accent);box-shadow:0 0 0 4px #ffd00020}
+    .card[data-state="wrong"]{animation:shake .25s linear}
+    @keyframes shake{25%{transform:translateX(3px)}50%{transform:translateX(-3px)}75%{transform:translateX(2px)}100%{transform:translateX(0)}}
     .pillbar{display:flex;gap:8px;align-items:center}
     .pill{background:#0f1520;border:1px solid #223047;border-radius:999px;padding:6px 10px;font-size:12px;color:var(--muted)}
     .pill strong{color:#e9eef7}
     .footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px;color:var(--muted);font-size:13px}
     details.editor{margin-top:18px}
-    textarea{width:100%;min-height:140px;background:#0c121b;border:1px solid #223047;border-radius:12px;color:#e9eef7;padding:12px 14px;font-family:ui-monospace}
-  </style>
-  <!-- Add-ons: thumbnails & drag-and-drop -->
-  <style>
-    .card{display:flex;align-items:center;gap:10px}
-    .thumb{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#0f1520;border:1px solid #223047;font-size:16px;flex:0 0 28px}
-    .card.drop-target{outline:2px dashed #3a4b62}
+    details.editor summary{cursor:pointer;list-style:none}
+    details.editor summary::-webkit-details-marker{display:none}
+    textarea{width:100%;min-height:140px;background:#0c121b;border:1px solid #223047;border-radius:12px;color:#e9eef7;padding:12px 14px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    .help{font-size:12px;color:var(--muted);margin-top:6px}
+    .hidden{display:none}
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>ITF+ Matching Game <span class="tag">Drag & Drop</span></h1>
+      <h1>ITF+ Matching Game <span class="tag">Terms ↔ Definitions</span></h1>
       <div class="pillbar">
         <div class="pill">Correct: <strong id="stat-correct">0</strong></div>
         <div class="pill">Attempts: <strong id="stat-attempts">0</strong></div>
+        <div class="pill">Timer: <strong id="stat-timer">00:00</strong></div>
       </div>
     </header>
+
+    <div class="controls">
+      <select id="dataset">
+        <option value="itf_core">ITF+ Core (default)</option>
+        <option value="security_basics">Security Basics</option>
+      </select>
+      <button id="btn-new">New Round</button>
+      <button id="btn-reveal">Reveal Matches</button>
+      <button id="btn-reset">Reset Stats</button>
+      <label style="display:flex;align-items:center;gap:8px;background:transparent;border:none;padding:0">
+        <input id="chk-swap" type="checkbox" /> <span>Swap sides (defs on left)</span>
+      </label>
+    </div>
 
     <div class="columns">
       <section class="col" id="left">
@@ -65,185 +78,200 @@
         <div class="list" id="right-list"></div>
       </section>
     </div>
+
+    <div class="footer">
+      <div>Built for BootUp PGH • Edit the pairs below to customize.</div>
+      <div id="status"></div>
+    </div>
+
+    <details class="editor">
+      <summary>✏️ Edit term/definition pairs (CSV: term,definition)</summary>
+      <textarea id="editor"></textarea>
+      <div class="help">Paste pairs as <code>term,definition</code> per line. Click <em>New Round</em> to load your edits.</div>
+    </details>
   </div>
 
   <script>
-    const pairs = [
-      {id:1, term:"CPU", def:"The computer's primary processor", img:"https://via.placeholder.com/40"},
-      {id:2, term:"RAM", def:"Short-term volatile memory", img:"https://via.placeholder.com/40"},
-      {id:3, term:"SSD", def:"Fast solid-state storage", img:"https://via.placeholder.com/40"}
-    ];
+    // ----- Datasets
+    const DATASETS = {
+      itf_core: `
+CPU,The computer's primary processor that performs calculations and instructions.
+RAM,Short-term volatile memory used to store data for running programs.
+HDD,Older magnetic storage with spinning platters used for long-term storage.
+SSD,Faster solid-state storage with no moving parts.
+Operating System,Software that manages hardware and provides services for applications (e.g., Windows, macOS, Linux).
+Application Software,Programs that help users perform tasks (e.g., browsers, word processors).
+Motherboard,The main circuit board that connects and allows communication between components.
+Power Supply Unit (PSU),Converts AC power from the wall to DC power for computer components.
+GPU,A processor optimized for graphics rendering and parallel operations.
+Input Device,Hardware used to send data to a computer (e.g., keyboard, mouse, scanner).
+Output Device,Hardware that receives data from a computer (e.g., monitor, printer, speakers).
+NIC,Hardware that connects a device to a network (wired or wireless).
+IP Address,A numerical label that identifies a device on a network.
+MAC Address,A hardware address burned into a network interface for local network identification.
+File Extension,The suffix that tells the OS which app can open a file (e.g., .docx, .jpg).
+Backup,Copying data so it can be restored after loss or corruption.
+Cloud Computing,Delivering computing services over the internet (IaaS, PaaS, SaaS).
+BIOS/UEFI,Firmware that initializes hardware and starts the boot process.
+Peripheral,External device that adds functionality (e.g., webcam, external drive).
+Driver,Software that lets the OS communicate with hardware devices.
+`.
+      trim(),
 
-    const leftList = document.getElementById('left-list');
-    const rightList = document.getElementById('right-list');
-    let correct = 0, attempts = 0;
-
-    function render(){
-      pairs.forEach(p => {
-        const termCard = document.createElement('div');
-        termCard.className = 'card';
-        termCard.draggable = true;
-        termCard.dataset.id = p.id;
-        termCard.innerHTML = `<img src="${p.img}" alt=""><button>${p.term}</button>`;
-        addDragEvents(termCard);
-        leftList.appendChild(termCard);
-
-        const defCard = document.createElement('div');
-        defCard.className = 'card';
-        defCard.dataset.id = p.id;
-        defCard.innerHTML = `<img src="${p.img}" alt=""><button>${p.def}</button>`;
-        addDropEvents(defCard);
-        rightList.appendChild(defCard);
-      });
-    }
-
-    function addDragEvents(el){
-      el.addEventListener('dragstart', e => {
-        e.dataTransfer.setData('text/plain', el.dataset.id);
-      });
-    }
-
-    function addDropEvents(el){
-      el.addEventListener('dragover', e => {
-        e.preventDefault();
-        el.classList.add('drag-over');
-      });
-      el.addEventListener('dragleave', e => {
-        el.classList.remove('drag-over');
-      });
-      el.addEventListener('drop', e => {
-        e.preventDefault();
-        el.classList.remove('drag-over');
-        const draggedId = e.dataTransfer.getData('text/plain');
-        attempts++;
-        if(draggedId === el.dataset.id){
-          correct++;
-          el.style.backgroundColor = 'var(--ok)';
-          document.querySelector(`.card[data-id='${draggedId}']`).style.backgroundColor = 'var(--ok)';
-        } else {
-          el.style.backgroundColor = 'var(--bad)';
-        }
-        document.getElementById('stat-correct').textContent = correct;
-        document.getElementById('stat-attempts').textContent = attempts;
-      });
-    }
-
-    render();
-  </script>
-<script>
-  // --- Augment with thumbnails + drag & drop without touching original game logic
-  (function(){
-    const leftList = document.getElementById('left-list');
-    const rightList = document.getElementById('right-list');
-    const leftTitle = document.getElementById('left-title');
-    const rightTitle = document.getElementById('right-title');
-
-    const iconFor = (txt)=>{
-      const t = (txt||'').toLowerCase();
-      if(t.includes('cpu')||t.includes('processor')) return '🧠';
-      if(t.includes('ram')||t.includes('memory')) return '🧠';
-      if(t.includes('hdd')||t.includes('hard')) return '💽';
-      if(t.includes('ssd')) return '💾';
-      if(t.includes('operating')||t==='os') return '🖥️';
-      if(t.includes('application')||t.includes('app')) return '📱';
-      if(t.includes('motherboard')) return '🧩';
-      if(t.includes('power')||t.includes('psu')) return '🔌';
-      if(t.includes('gpu')||t.includes('graphics')) return '🎮';
-      if(t.includes('input')) return '⌨️';
-      if(t.includes('output')) return '📺';
-      if(t.includes('nic')||t.includes('network')) return '🌐';
-      if(t.includes('ip address')) return '#️⃣';
-      if(t.includes('mac address')) return '🪪';
-      if(t.includes('file')||t.includes('extension')) return '📄';
-      if(t.includes('backup')) return '🗄️';
-      if(t.includes('cloud')) return '☁️';
-      if(t.includes('bios')||t.includes('uefi')) return '🧰';
-      if(t.includes('peripheral')) return '🎧';
-      if(t.includes('driver')) return '🧩';
-      return '💡';
+      security_basics: `
+Antivirus,Software that detects and removes known malicious software.
+Firewall,Software or hardware that filters network traffic to allow or block connections.
+Multi-factor Authentication (MFA),Using two or more verification methods to prove identity.
+Encryption,Transforming data into unreadable form without the correct key.
+Phishing,Fraudulent attempt to obtain sensitive information by pretending to be a trustworthy entity.
+Malware,Any software designed to harm or exploit a system.
+Patch,An update that fixes security vulnerabilities or bugs.
+Least Privilege,Granting users only the access required to perform their tasks.
+Social Engineering,Manipulating people to gain unauthorized access or information.
+Strong Password,A complex passphrase that is long and hard to guess or brute-force.
+`.
+      trim()
     };
 
-    function isTermsColumn(card){
-      const col = card.closest('section');
-      if(!col) return false;
-      const title = col.querySelector('h2');
-      return title && title.textContent.trim().toLowerCase()==='terms';
-    }
-    function isDefsColumn(card){
-      const col = card.closest('section');
-      if(!col) return false;
-      const title = col.querySelector('h2');
-      return title && title.textContent.trim().toLowerCase()==='definitions';
-    }
+    // ----- State
+    let pairs = []; // [{id, term, def}]
+    let selected = { left: null, right: null };
+    let correct = 0, attempts = 0, timer=0, ticker=null;
 
-    function addThumb(card){
-      if(card.querySelector('.thumb')) return;
-      const btn = card.querySelector('button');
-      if(!btn) return;
-      const span = document.createElement('div');
-      span.className='thumb';
-      span.textContent = isTermsColumn(card) ? iconFor(btn.textContent) : '📘';
-      card.insertBefore(span, btn);
-    }
+    const $ = (sel)=>document.querySelector(sel);
+    const $$ = (sel)=>document.querySelectorAll(sel);
 
-    function enableDnD(card){
-      const btn = card.querySelector('button');
-      if(!btn) return;
-      // draggable if in Terms column and not matched
-      card.draggable = isTermsColumn(card) && card.dataset.state!=='matched';
+    const statCorrect = $('#stat-correct');
+    const statAttempts = $('#stat-attempts');
+    const statTimer = $('#stat-timer');
+    const status = $('#status');
+    const leftList = $('#left-list');
+    const rightList = $('#right-list');
 
-      card.addEventListener('dragstart', (e)=>{
-        if(!card.draggable){ e.preventDefault(); return; }
-        e.dataTransfer.effectAllowed='move';
-        e.dataTransfer.setData('text/plain', card.dataset.id||'');
-        const targets = isTermsColumn(card) ? [...rightList.children] : [...leftList.children];
-        targets.forEach(t=>{ if(t.dataset.state!=='matched') t.classList.add('drop-target'); });
-      });
-      card.addEventListener('dragend', ()=>{
-        document.querySelectorAll('.card.drop-target').forEach(t=>t.classList.remove('drop-target'));
-      });
+    // ----- Utils
+    const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    const mmss = s => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 
-      // allow drop on definition cards
-      card.addEventListener('dragover', (e)=>{
-        if(isDefsColumn(card) && card.dataset.state!=='matched'){ e.preventDefault(); }
-      });
-      card.addEventListener('drop', (e)=>{
-        if(!(isDefsColumn(card) && card.dataset.state!=='matched')) return;
-        e.preventDefault();
-        const draggedId = e.dataTransfer.getData('text/plain');
-        if(!draggedId) return;
-        const sourceCol = isTermsColumn(leftList.querySelector(`.card[data-id="${draggedId}"]`))?leftList:rightList;
-        const dragged = sourceCol.querySelector(`.card[data-id="${draggedId}"]`);
-        if(!dragged || dragged.dataset.state==='matched') return;
-        // Use existing click-to-match logic so stats & timer stay correct
-        const db = dragged.querySelector('button');
-        const tb = card.querySelector('button');
-        if(db && tb){ db.click(); setTimeout(()=>tb.click(), 0); }
-      });
+    function startTimer(){ clearInterval(ticker); timer=0; statTimer.textContent=mmss(timer); ticker=setInterval(()=>{ timer++; statTimer.textContent=mmss(timer); },1000); }
+    function stopTimer(){ clearInterval(ticker); }
+
+    function loadDataset(key){
+      const raw = (DATASETS[key]||'').trim();
+      $('#editor').value = raw;
+      parseEditor();
     }
 
-    function augmentCard(card){
-      if(card.dataset.augmented==='1') return;
-      addThumb(card);
-      enableDnD(card);
-      card.dataset.augmented='1';
+    function parseEditor(){
+      const lines = $('#editor').value.split(/\n+/).filter(Boolean);
+      pairs = lines.map((line,idx)=>{
+        const [term, ...rest] = line.split(',');
+        const def = rest.join(',').trim();
+        return { id: idx+1, term: term?.trim(), def };
+      }).filter(x=>x.term && x.def);
     }
 
-    function augmentAll(){
-      document.querySelectorAll('.list .card').forEach(augmentCard);
+    function render(){
+      // reset game state
+      selected = {left:null,right:null};
+      correct = 0; attempts = 0; updateStats(); status.textContent='';
+
+      const leftItems = pairs.map(p=>({ side:'left', id:p.id, text: $('#chk-swap').checked ? p.def : p.term }));
+      const rightItems = pairs.map(p=>({ side:'right', id:p.id, text: $('#chk-swap').checked ? p.term : p.def }));
+
+      shuffle(leftItems); shuffle(rightItems);
+
+      leftList.innerHTML = '';
+      rightList.innerHTML = '';
+
+      for(const item of leftItems){ leftList.appendChild(makeCard(item)); }
+      for(const item of rightItems){ rightList.appendChild(makeCard(item)); }
+
+      startTimer();
     }
 
-    const mo = new MutationObserver(()=>{
-      // Reset aug flag on re-render to refresh drag state & thumbs
-      document.querySelectorAll('.list .card').forEach(c=>{ c.dataset.augmented=''; });
-      augmentAll();
-    });
-    mo.observe(leftList,{childList:true});
-    mo.observe(rightList,{childList:true});
+    function makeCard(item){
+      const li = document.createElement('div');
+      li.className = 'card';
+      li.dataset.side = item.side;
+      li.dataset.id = item.id;
+      li.dataset.state = '';
+      const btn = document.createElement('button');
+      btn.textContent = item.text;
+      btn.setAttribute('aria-label', `Select ${item.side==='left'?'term':'definition'}: ${item.text}`);
+      btn.addEventListener('click', ()=> handleSelect(li));
+      li.appendChild(btn);
+      return li;
+    }
 
-    // Initial pass once page script finished rendering
-    window.addEventListener('load', ()=> setTimeout(augmentAll, 50));
-  })();
-</script>
+    function handleSelect(card){
+      if(card.dataset.state==='matched') return;
+      const side = card.dataset.side;
+      const otherSide = side==='left'?'right':'left';
+
+      // toggle selection on this side
+      if(selected[side]===card){
+        card.dataset.state='';
+        selected[side]=null;
+        return;
+      }
+
+      // clear previous selection on this side
+      if(selected[side]) selected[side].dataset.state='';
+      selected[side]=card; card.dataset.state='selected';
+
+      // if both selected, evaluate
+      if(selected[otherSide]){
+        attempts++; updateStats();
+        const isMatch = selected.left.dataset.id===selected.right.dataset.id;
+        if(isMatch){
+          selected.left.dataset.state = 'matched';
+          selected.right.dataset.state = 'matched';
+          selected = {left:null,right:null};
+          correct++; updateStats();
+          flashStatus('Nice! Matched.', 'ok');
+          if(correct===pairs.length){
+            stopTimer();
+            flashStatus(`Round complete in ${mmss(timer)} with ${attempts} attempts.`, 'ok');
+          }
+        } else {
+          // brief wrong animation
+          [selected.left, selected.right].forEach(el=>{ el.dataset.state='wrong'; setTimeout(()=>{ if(el.dataset.state==='wrong') el.dataset.state=''; },220); });
+          flashStatus('Try again.', 'bad');
+        }
+      }
+    }
+
+    function flashStatus(msg, type){
+      status.textContent = msg;
+      status.style.color = type==='ok' ? 'var(--ok)' : type==='bad' ? 'var(--bad)' : 'var(--muted)';
+      if(type) setTimeout(()=>{ status.style.color='var(--muted)'; }, 1200);
+    }
+
+    function updateStats(){
+      statCorrect.textContent = correct;
+      statAttempts.textContent = attempts;
+    }
+
+    function reveal(){
+      // Show faint lines by programmatically pairing (visual cue): replace text with 1), 2) and mirror order
+      // Simpler: temporarily sort columns by id so items align vertically
+      const leftCards = [...leftList.children];
+      const rightCards = [...rightList.children];
+      leftCards.sort((a,b)=>a.dataset.id-b.dataset.id).forEach(el=>leftList.appendChild(el));
+      rightCards.sort((a,b)=>a.dataset.id-b.dataset.id).forEach(el=>rightList.appendChild(el));
+      flashStatus('Pairs aligned for review. Click New Round to reshuffle.', null);
+    }
+
+    // ----- Events
+    $('#btn-new').addEventListener('click', ()=>{ parseEditor(); render(); });
+    $('#btn-reveal').addEventListener('click', reveal);
+    $('#btn-reset').addEventListener('click', ()=>{ correct=0; attempts=0; updateStats(); timer=0; statTimer.textContent=mmss(0); flashStatus('Stats reset.', null); });
+    $('#dataset').addEventListener('change', e=>{ loadDataset(e.target.value); render(); });
+    $('#chk-swap').addEventListener('change', ()=>{ render(); });
+
+    // init
+    loadDataset('itf_core');
+    render();
+  </script>
 </body>
 </html>
