@@ -1,12 +1,249 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<link rel="stylesheet" href="/style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ITF+ Matching Game — BootUp PGH</title>
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#111823; --accent:#ffd000; --muted:#a7b0c0; --ok:#31c48d; --bad:#ef4444; --card:#151e2a;
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(120deg,#0b0f14,#0e141d 35%,#0b0f14);color:#e9eef7}
+    .wrap{max-width:1100px;margin:32px auto;padding:0 16px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:16px}
+    h1{font-size:clamp(20px,3.6vw,34px);margin:0;font-weight:800;letter-spacing:0.2px}
+    .tag{font-size:12px;color:#0b0f14;background:var(--accent);padding:4px 10px;border-radius:999px;font-weight:700}
+    .controls{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:10px 0 18px}
+    .controls > *{background:var(--panel);border:1px solid #223047;color:#e9eef7;border-radius:12px;padding:10px 12px}
+    select,button,input[type="checkbox"]+label{cursor:pointer}
+    button{border:1px solid #223047;transition:transform .05s ease,opacity .2s ease}
+    button:hover{opacity:.9}
+    button:active{transform:translateY(1px)}
+    .columns{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    @media (max-width:800px){.columns{grid-template-columns:1fr}}
+    .col{background:var(--panel);border:1px solid #223047;border-radius:var(--radius);padding:14px;min-height:420px}
+    .col h2{margin:4px 6px 10px;font-size:14px;color:var(--muted);font-weight:700;letter-spacing:.3px;text-transform:uppercase}
+    .list{display:grid;gap:10px}
+    .card{background:var(--card);border:1px solid #223047;border-radius:14px;padding:12px;display:flex;align-items:center;gap:10px;line-height:1.35}
+    .card img{width:40px;height:40px;border-radius:8px;object-fit:cover}
+    .card button{all:unset;display:block;width:100%;cursor:pointer}
+    .card[data-state="matched"]{opacity:.5;filter:saturate(.8)}
+    .card.drag-over{outline:2px dashed var(--accent)}
+    .pillbar{display:flex;gap:8px;align-items:center}
+    .pill{background:#0f1520;border:1px solid #223047;border-radius:999px;padding:6px 10px;font-size:12px;color:var(--muted)}
+    .pill strong{color:#e9eef7}
+    .footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px;color:var(--muted);font-size:13px}
+    details.editor{margin-top:18px}
+    textarea{width:100%;min-height:140px;background:#0c121b;border:1px solid #223047;border-radius:12px;color:#e9eef7;padding:12px 14px;font-family:ui-monospace}
+  </style>
+  <!-- Add-ons: thumbnails & drag-and-drop -->
+  <style>
+    .card{display:flex;align-items:center;gap:10px}
+    .thumb{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#0f1520;border:1px solid #223047;font-size:16px;flex:0 0 28px}
+    .card.drop-target{outline:2px dashed #3a4b62}
+  </style>
 </head>
 <body>
-<h1>BootUpPGH</h1>
-<p>a tech learning space online and in person for the hood in Pittsburgh and hopefully beyond 🚀 We are unapologetically hip-hop, community-based, real and committed to raising the bar for us all, whether its access, mentorship, community or opportunity. No Question too Small or Idea too Tall.</p>
-<p>I'm hosted with GitHub Pages.</p>
-  <h2><a href="www.bootuppgh.com"></a></h2>
+  <div class="wrap">
+    <header>
+      <h1>ITF+ Matching Game <span class="tag">Drag & Drop</span></h1>
+      <div class="pillbar">
+        <div class="pill">Correct: <strong id="stat-correct">0</strong></div>
+        <div class="pill">Attempts: <strong id="stat-attempts">0</strong></div>
+      </div>
+    </header>
+
+    <div class="columns">
+      <section class="col" id="left">
+        <h2>Terms</h2>
+        <div class="list" id="left-list"></div>
+      </section>
+      <section class="col" id="right">
+        <h2>Definitions</h2>
+        <div class="list" id="right-list"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const pairs = [
+      {id:1, term:"CPU", def:"The computer's primary processor", img:"https://via.placeholder.com/40"},
+      {id:2, term:"RAM", def:"Short-term volatile memory", img:"https://via.placeholder.com/40"},
+      {id:3, term:"SSD", def:"Fast solid-state storage", img:"https://via.placeholder.com/40"}
+    ];
+
+    const leftList = document.getElementById('left-list');
+    const rightList = document.getElementById('right-list');
+    let correct = 0, attempts = 0;
+
+    function render(){
+      pairs.forEach(p => {
+        const termCard = document.createElement('div');
+        termCard.className = 'card';
+        termCard.draggable = true;
+        termCard.dataset.id = p.id;
+        termCard.innerHTML = `<img src="${p.img}" alt=""><button>${p.term}</button>`;
+        addDragEvents(termCard);
+        leftList.appendChild(termCard);
+
+        const defCard = document.createElement('div');
+        defCard.className = 'card';
+        defCard.dataset.id = p.id;
+        defCard.innerHTML = `<img src="${p.img}" alt=""><button>${p.def}</button>`;
+        addDropEvents(defCard);
+        rightList.appendChild(defCard);
+      });
+    }
+
+    function addDragEvents(el){
+      el.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('text/plain', el.dataset.id);
+      });
+    }
+
+    function addDropEvents(el){
+      el.addEventListener('dragover', e => {
+        e.preventDefault();
+        el.classList.add('drag-over');
+      });
+      el.addEventListener('dragleave', e => {
+        el.classList.remove('drag-over');
+      });
+      el.addEventListener('drop', e => {
+        e.preventDefault();
+        el.classList.remove('drag-over');
+        const draggedId = e.dataTransfer.getData('text/plain');
+        attempts++;
+        if(draggedId === el.dataset.id){
+          correct++;
+          el.style.backgroundColor = 'var(--ok)';
+          document.querySelector(`.card[data-id='${draggedId}']`).style.backgroundColor = 'var(--ok)';
+        } else {
+          el.style.backgroundColor = 'var(--bad)';
+        }
+        document.getElementById('stat-correct').textContent = correct;
+        document.getElementById('stat-attempts').textContent = attempts;
+      });
+    }
+
+    render();
+  </script>
+<script>
+  // --- Augment with thumbnails + drag & drop without touching original game logic
+  (function(){
+    const leftList = document.getElementById('left-list');
+    const rightList = document.getElementById('right-list');
+    const leftTitle = document.getElementById('left-title');
+    const rightTitle = document.getElementById('right-title');
+
+    const iconFor = (txt)=>{
+      const t = (txt||'').toLowerCase();
+      if(t.includes('cpu')||t.includes('processor')) return '🧠';
+      if(t.includes('ram')||t.includes('memory')) return '🧠';
+      if(t.includes('hdd')||t.includes('hard')) return '💽';
+      if(t.includes('ssd')) return '💾';
+      if(t.includes('operating')||t==='os') return '🖥️';
+      if(t.includes('application')||t.includes('app')) return '📱';
+      if(t.includes('motherboard')) return '🧩';
+      if(t.includes('power')||t.includes('psu')) return '🔌';
+      if(t.includes('gpu')||t.includes('graphics')) return '🎮';
+      if(t.includes('input')) return '⌨️';
+      if(t.includes('output')) return '📺';
+      if(t.includes('nic')||t.includes('network')) return '🌐';
+      if(t.includes('ip address')) return '#️⃣';
+      if(t.includes('mac address')) return '🪪';
+      if(t.includes('file')||t.includes('extension')) return '📄';
+      if(t.includes('backup')) return '🗄️';
+      if(t.includes('cloud')) return '☁️';
+      if(t.includes('bios')||t.includes('uefi')) return '🧰';
+      if(t.includes('peripheral')) return '🎧';
+      if(t.includes('driver')) return '🧩';
+      return '💡';
+    };
+
+    function isTermsColumn(card){
+      const col = card.closest('section');
+      if(!col) return false;
+      const title = col.querySelector('h2');
+      return title && title.textContent.trim().toLowerCase()==='terms';
+    }
+    function isDefsColumn(card){
+      const col = card.closest('section');
+      if(!col) return false;
+      const title = col.querySelector('h2');
+      return title && title.textContent.trim().toLowerCase()==='definitions';
+    }
+
+    function addThumb(card){
+      if(card.querySelector('.thumb')) return;
+      const btn = card.querySelector('button');
+      if(!btn) return;
+      const span = document.createElement('div');
+      span.className='thumb';
+      span.textContent = isTermsColumn(card) ? iconFor(btn.textContent) : '📘';
+      card.insertBefore(span, btn);
+    }
+
+    function enableDnD(card){
+      const btn = card.querySelector('button');
+      if(!btn) return;
+      // draggable if in Terms column and not matched
+      card.draggable = isTermsColumn(card) && card.dataset.state!=='matched';
+
+      card.addEventListener('dragstart', (e)=>{
+        if(!card.draggable){ e.preventDefault(); return; }
+        e.dataTransfer.effectAllowed='move';
+        e.dataTransfer.setData('text/plain', card.dataset.id||'');
+        const targets = isTermsColumn(card) ? [...rightList.children] : [...leftList.children];
+        targets.forEach(t=>{ if(t.dataset.state!=='matched') t.classList.add('drop-target'); });
+      });
+      card.addEventListener('dragend', ()=>{
+        document.querySelectorAll('.card.drop-target').forEach(t=>t.classList.remove('drop-target'));
+      });
+
+      // allow drop on definition cards
+      card.addEventListener('dragover', (e)=>{
+        if(isDefsColumn(card) && card.dataset.state!=='matched'){ e.preventDefault(); }
+      });
+      card.addEventListener('drop', (e)=>{
+        if(!(isDefsColumn(card) && card.dataset.state!=='matched')) return;
+        e.preventDefault();
+        const draggedId = e.dataTransfer.getData('text/plain');
+        if(!draggedId) return;
+        const sourceCol = isTermsColumn(leftList.querySelector(`.card[data-id="${draggedId}"]`))?leftList:rightList;
+        const dragged = sourceCol.querySelector(`.card[data-id="${draggedId}"]`);
+        if(!dragged || dragged.dataset.state==='matched') return;
+        // Use existing click-to-match logic so stats & timer stay correct
+        const db = dragged.querySelector('button');
+        const tb = card.querySelector('button');
+        if(db && tb){ db.click(); setTimeout(()=>tb.click(), 0); }
+      });
+    }
+
+    function augmentCard(card){
+      if(card.dataset.augmented==='1') return;
+      addThumb(card);
+      enableDnD(card);
+      card.dataset.augmented='1';
+    }
+
+    function augmentAll(){
+      document.querySelectorAll('.list .card').forEach(augmentCard);
+    }
+
+    const mo = new MutationObserver(()=>{
+      // Reset aug flag on re-render to refresh drag state & thumbs
+      document.querySelectorAll('.list .card').forEach(c=>{ c.dataset.augmented=''; });
+      augmentAll();
+    });
+    mo.observe(leftList,{childList:true});
+    mo.observe(rightList,{childList:true});
+
+    // Initial pass once page script finished rendering
+    window.addEventListener('load', ()=> setTimeout(augmentAll, 50));
+  })();
+</script>
 </body>
 </html>
