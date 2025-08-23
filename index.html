@@ -176,6 +176,31 @@ body.await-left  #left .card button{
   cursor: pointer;
 }
 
+/* --- Correct-match flash & confetti --- */
+@keyframes matchFlash {
+  0%   { outline:2px solid var(--accent); box-shadow:0 0 0 4px var(--focus), 0 6px 20px rgba(0,0,0,.35); }
+  50%  { outline:2px solid #28C76F;      box-shadow:0 0 0 4px rgba(40,199,111,.35), 0 6px 20px rgba(0,0,0,.35); }
+  100% { outline:0; box-shadow:none; }
+}
+.card.flash-match{
+  animation: matchFlash 600ms ease-in-out;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce){
+  .card.flash-match{ animation: none; }
+}
+
+/* Confetti bits */
+.confetti {
+  position: fixed;
+  width:10px; height:14px;
+  pointer-events:none;
+  opacity:1;
+  will-change: transform, opacity;
+}
+
+
 </style>
 
 </head>
@@ -370,6 +395,65 @@ Strong Password,A complex passphrase that is long and hard to guess or brute-for
       return li;
     }
 
+    // Flash yellow -> green before marking matched, then gray out
+function animateCorrectMatch(cardA, cardB, done){
+  let finished = 0;
+  const onEnd = (el) => {
+    el.classList.remove('flash-match');
+    el.removeEventListener('animationend', onEndWrapper);
+    if(++finished === 2) done();
+  };
+  const onEndWrapper = (e) => onEnd(e.currentTarget);
+
+  [cardA, cardB].forEach(el=>{
+    el.classList.add('flash-match');
+    el.addEventListener('animationend', onEndWrapper, { once:true });
+  });
+
+  // Safety timeout in case animationend doesn't fire
+  setTimeout(()=>{ if(finished<2){ [cardA,cardB].forEach(el=>el.classList.remove('flash-match')); done(); } }, 700);
+}
+
+// Tiny confetti burst near the matched pair
+function confettiBurst(nearEl){
+  // If user prefers reduced motion, skip
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  const colors = ['#FFB800','#FFD15A','#28C76F','#FFFFFF','#0A0A0A'];
+  const rect = nearEl.getBoundingClientRect();
+  const originX = rect.left + rect.width/2;
+  const originY = rect.top + rect.height/2;
+
+  const pieces = 24; // keep it light
+  for(let i=0;i<pieces;i++){
+    const div = document.createElement('div');
+    div.className = 'confetti';
+    div.style.left = `${originX}px`;
+    div.style.top  = `${originY}px`;
+    div.style.background = colors[i % colors.length];
+    div.style.transform = `translate(-50%,-50%) rotate(${Math.random()*360}deg)`;
+
+    document.body.appendChild(div);
+
+    const angle = Math.random()*2*Math.PI;
+    const velocity = 6 + Math.random()*9; // px per frame-ish
+    const dx = Math.cos(angle)*velocity*16;  // 16ms ~ 1 frame
+    const dy = Math.sin(angle)*velocity*16 - (Math.random()*12); // slight up bias
+    const rotate = (Math.random()*720 - 360);
+
+    // Use transitions for simplicity
+    div.style.transition = 'transform 900ms cubic-bezier(.2,.8,.2,1), opacity 900ms ease';
+    requestAnimationFrame(()=>{
+      div.style.transform = `translate(${dx}px, ${dy}px) rotate(${rotate}deg)`;
+      div.style.opacity = '0';
+    });
+
+    // cleanup
+    setTimeout(()=>div.remove(), 1000);
+  }
+}
+
+
     function handleSelect(card){
       if(card.dataset.state==='matched') return;
       const side = card.dataset.side;
@@ -390,17 +474,34 @@ Strong Password,A complex passphrase that is long and hard to guess or brute-for
       if(selected[otherSide]){
         attempts++; updateStats();
         const isMatch = selected.left.dataset.id===selected.right.dataset.id;
-        if(isMatch){
-          selected.left.dataset.state = 'matched';
-          selected.right.dataset.state = 'matched';
-          selected = {left:null,right:null};
-          correct++; updateStats();
-          flashStatus('Nice! Matched.', 'ok');
-          if(correct===pairs.length){
-            stopTimer();
-            flashStatus(`Round complete in ${mmss(timer)} with ${attempts} attempts.`, 'ok');
-          }
-        } else {
+       if(isMatch){
+  const leftCard = selected.left;
+  const rightCard = selected.right;
+
+  // Flash yellow -> green, throw confetti, then gray out as matched
+  animateCorrectMatch(leftCard, rightCard, ()=>{
+    // subtle confetti near the pair (use the column center)
+    confettiBurst(rightCard);
+
+    leftCard.dataset.state  = 'matched';
+    rightCard.dataset.state = 'matched';
+
+    selected = {left:null,right:null};
+    correct++; updateStats();
+    flashStatus('Nice! Matched.', 'ok');
+    setAwaitUI();
+
+    if(correct===pairs.length){
+      stopTimer();
+      confettiBurst(document.querySelector('header h1')); // celebrate the round
+      flashStatus(`Round complete in ${mmss(timer)} with ${attempts} attempts.`, 'ok');
+    }
+  });
+
+  // bail out here so we don't run the rest of the function while animating
+  return;
+}
+ else {
           // brief wrong animation
           [selected.left, selected.right].forEach(el=>{ el.dataset.state='wrong'; setTimeout(()=>{ if(el.dataset.state==='wrong') el.dataset.state=''; },220); });
           flashStatus('Try again.', 'bad');
