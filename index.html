@@ -139,6 +139,43 @@
 
   .help{font-size:12px;color:var(--muted);margin-top:6px}
   .hidden{display:none}
+
+    /* --- Selection guidance & clarity --- */
+
+/* Stronger selected card */
+.card[data-state="selected"]{
+  position: relative;
+  background: linear-gradient(0deg, rgba(255,184,0,.08), rgba(255,184,0,.08)), var(--card);
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  box-shadow: 0 0 0 4px var(--focus), 0 6px 20px rgba(0,0,0,.35);
+}
+
+/* Dim non-selected cards in the same column when one is picked */
+.col[data-has-selection="true"] .card:not([data-state="selected"]){
+  opacity: .65;
+  filter: saturate(.9);
+}
+
+/* Glow the column that is REQUIRED next */
+body.await-right #right,
+body.await-left  #left{
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 4px var(--focus);
+}
+
+/* Nudge the column headers with a hint color when awaiting */
+body.await-right #right h2,
+body.await-left  #left h2{
+  color: var(--accent);
+}
+
+/* Optional: cursor hint on the “required” column */
+body.await-right #right .card button,
+body.await-left  #left .card button{
+  cursor: pointer;
+}
+
 </style>
 
 </head>
@@ -286,6 +323,38 @@ Strong Password,A complex passphrase that is long and hard to guess or brute-for
 
       startTimer();
     }
+
+    function setAwaitUI(){
+  // Clear flags
+  document.body.classList.remove('await-left','await-right');
+  $('#left').removeAttribute('data-has-selection');
+  $('#right').removeAttribute('data-has-selection');
+
+  // Nothing selected on either side -> nothing to highlight
+  if(!selected.left && !selected.right) return;
+
+  // If a left item is selected, we await a right choice
+  if(selected.left && !selected.right){
+    document.body.classList.add('await-right');
+    $('#left').setAttribute('data-has-selection','true');
+    status.textContent = 'Select a definition to match…';
+    status.style.color = 'var(--muted)';
+    return;
+  }
+
+  // If a right item is selected, we await a left choice
+  if(selected.right && !selected.left){
+    document.body.classList.add('await-left');
+    $('#right').setAttribute('data-has-selection','true');
+    status.textContent = 'Select a term to match…';
+    status.style.color = 'var(--muted)';
+    return;
+  }
+
+  // If both are selected, we'll evaluate immediately in handleSelect
+}
+
+    
 
     function makeCard(item){
       const li = document.createElement('div');
